@@ -1,0 +1,18 @@
+# secrets
+.env
+app-config.json
+
+# node
+node_modules/
+npm-debug.log
+
+# python
+__pycache__/
+*.pyc
+
+# local artifacts
+predictions.csv
+._tmp_input_*.json
+.DS_Store
+*.log
+.catalystrc

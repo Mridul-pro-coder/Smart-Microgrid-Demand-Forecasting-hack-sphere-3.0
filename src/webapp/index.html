@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚡ GridPulse — Smart Microgrid Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E⚡%3C/text%3E%3C/svg%3E" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --text:     #1f2428;
+      --muted:    #6b7280;
+      --border:   rgba(120, 130, 145, 0.20);
+      --grid-blue:   #2f6fed;
+      --renew-green: #18a05a;
+      --alert-red:   #e5484d;
+      --amber:       #c78a00;
+      --radius: 12px;
+      /* frosted-glass card recipe */
+      --glass-bg:  rgba(255, 255, 255, 0.55);
+      --glass-bd:  rgba(255, 255, 255, 0.85);
+      --glass-blur: 18px;
+      --glass-shadow: 0 6px 28px rgba(31, 36, 40, 0.07);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      /* white base with two faint tints so the glass cards read as "crystal" */
+      background:
+        radial-gradient(900px 520px at 88% -8%,  rgba(47, 111, 237, 0.10), transparent 62%),
+        radial-gradient(760px 460px at -4% 108%, rgba(24, 160, 90, 0.09),  transparent 62%),
+        #ffffff;
+    }
+
+    /* frosted-glass card base */
+    .glass {
+      background: var(--glass-bg);
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      border: 1px solid var(--glass-bd);
+      outline: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--glass-shadow);
+    }
+
+    /* ── Layout ─────────────────────────────────────────── */
+    .app {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 20px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 26px;
+    }
+    .title-block { display: flex; align-items: baseline; gap: 12px; }
+    header h1 {
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      background: linear-gradient(90deg, var(--grid-blue), var(--renew-green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .byline {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .byline b { color: var(--text); font-weight: 600; }
+    .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .badge-model, .badge-live {
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-bd);
+      outline: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      box-shadow: var(--glass-shadow);
+    }
+    .badge-model b { color: var(--renew-green); }
+    .badge-live span {
+      display: inline-block;
+      width: 7px; height: 7px;
+      background: var(--renew-green);
+      border-radius: 50%;
+      margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Alert Banner ───────────────────────────────────── */
+    .alert-banner {
+      display: none;
+      background: rgba(229, 72, 77, 0.08);
+      border: 1px solid rgba(229, 72, 77, 0.35);
+      border-left: 4px solid var(--alert-red);
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      margin-bottom: 20px;
+      color: #b3261e;
+      font-size: 0.875rem;
+      font-weight: 500;
+      box-shadow: var(--glass-shadow);
+    }
+    .alert-banner.visible { display: block; }
+
+    /* ── Input Section ──────────────────────────────────── */
+    .input-card {
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .input-card h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .input-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .file-drop {
+      flex: 1;
+      min-width: 200px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-align: center;
+    }
+    .file-drop:hover, .file-drop.drag-over {
+      border-color: var(--grid-blue);
+      color: var(--text);
+      background: rgba(47,111,237,0.05);
+    }
+    .file-drop strong { color: var(--text); }
+    .btn {
+      background: var(--grid-blue);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: 12px 24px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, box-shadow .15s;
+      align-self: flex-end;
+      box-shadow: 0 4px 14px rgba(47,111,237,0.35);
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+    .btn.ghost {
+      background: rgba(255,255,255,0.55);
+      color: var(--text);
+      border: 1px solid var(--border);
+      box-shadow: none;
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+    }
+    .btn.ghost:hover { opacity: 0.9; }
+
+    /* ── KPI Tiles ──────────────────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .kpi {
+      padding: 18px;
+    }
+    .kpi-label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 8px;
+    }
+    .kpi-value {
+      font-size: 1.9rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .kpi-value .unit { font-size: 0.9rem; color: var(--muted); font-weight: 400; }
+    .kpi-sub { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+    .kpi-value.green { color: var(--renew-green); }
+    .kpi-value.blue  { color: var(--grid-blue); }
+    .kpi-value.red   { color: var(--alert-red); }
+    .kpi-value.amber { color: var(--amber); }
+
+    /* ── Chart Card ─────────────────────────────────────── */
+    .chart-card {
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .chart-card h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+    #chart-container { height: 320px; position: relative; }
+    #chart-canvas { position: absolute; inset: 0; }
+
+    /* ── Hour Badges ────────────────────────────────────── */
+    .badge-strip {
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .badge-strip h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+    .badge-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+      gap: 5px;
+      max-height: 420px;
+      overflow-y: auto;
+    }
+    .hour-badge {
+      border-radius: 6px;
+      padding: 6px 0;
+      text-align: center;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: #fff;
+      transition: transform .15s;
+      cursor: default;
+    }
+    .hour-badge:hover { transform: scale(1.12); }
+    .hour-badge.grid     { background: var(--grid-blue); }
+    .hour-badge.renewable { background: var(--renew-green); }
+    .hour-badge.overload  { background: var(--alert-red); }
+    .hour-badge .h-label { display: block; font-size: 0.55rem; opacity: 0.8; }
+    .hour-badge .h-val   { display: block; margin-top: 3px; font-size: 0.68rem; }
+
+    /* ── SoC Gauge ──────────────────────────────────────── */
+    .soc-card {
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .soc-card h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+    .soc-progress {
+      height: 18px;
+      background: rgba(31,36,40,0.08);
+      border-radius: 9px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .soc-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--renew-green), #39d353);
+      border-radius: 9px;
+      transition: width .4s;
+    }
+    .soc-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    /* ── Logs ───────────────────────────────────────────── */
+    .log-card {
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .log-card h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+    #log-list {
+      list-style: none;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.78rem;
+      max-height: 200px;
+      overflow-y: auto;
+      color: var(--text);
+    }
+    #log-list li {
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(31,36,40,0.06);
+      color: var(--muted);
+    }
+    #log-list li .ts { color: var(--grid-blue); margin-right: 8px; }
+    #log-list li.alert .ts { color: var(--alert-red); }
+    #log-list li.alert { color: #b3261e; }
+    #log-list li.warning .ts { color: var(--amber); }
+    #log-list li.warning { color: #8a6100; }
+
+    /* ── Spinner ─────────────────────────────────────────── */
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid rgba(31,36,40,0.1);
+      border-top-color: var(--grid-blue);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .empty-state p { font-size: 0.9rem; margin-bottom: 8px; }
+
+    footer {
+      text-align: center;
+      padding: 20px;
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="title-block">
+      <h1>⚡ GridPulse</h1>
+      <div class="byline">Smart Microgrid &amp; Demand Forecasting · <b>by Mridul Gupta</b></div>
+    </div>
+    <div class="header-right">
+      <div class="badge-model" title="Published Zoho Catalyst QuickML regression model">
+        QuickML · <b>RMSE 9.19 kW</b> · R² 0.967
+      </div>
+      <div class="badge-live"><span></span> Live — Zoho Catalyst</div>
+      <button class="btn ghost" id="export-btn" style="display:none;" onclick="exportCsv()">⬇ Download CSV</button>
+    </div>
+  </header>
+
+  <!-- Alert Banner -->
+  <div class="alert-banner" id="alert-banner">
+    <strong>⚠️ Critical Overload Detected</strong>
+    <span id="alert-detail" style="margin-left:8px;"></span>
+  </div>
+
+  <!-- Input -->
+  <div class="glass input-card">
+    <h2>Telemetry Input</h2>
+    <div class="input-row">
+      <div class="file-drop" id="file-drop" tabindex="0">
+        <strong>Drop CSV here</strong> or click to browse<br>
+        <span style="font-size:0.72rem; color:var(--muted);">Columns: timestamp, ambient_temp_c, humidity_pct, solar_irradiance_wm2</span>
+        <input type="file" id="file-input" accept=".csv" hidden />
+      </div>
+      <button class="btn" id="run-btn" disabled>Run Forecast →</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" id="kpi-grid" style="display:none;">
+    <div class="kpi glass">
+      <div class="kpi-label">Peak Predicted Load</div>
+      <div class="kpi-value" id="kpi-peak">— <span class="unit">kW</span></div>
+      <div class="kpi-sub" id="kpi-peak-sub">window max</div>
+    </div>
+    <div class="kpi glass">
+      <div class="kpi-label">Overload Hours</div>
+      <div class="kpi-value red" id="kpi-overload">—</div>
+      <div class="kpi-sub">≥ 200 kW threshold</div>
+    </div>
+    <div class="kpi glass">
+      <div class="kpi-label">Renewable Hours</div>
+      <div class="kpi-value green" id="kpi-renewable">—</div>
+      <div class="kpi-sub">> 160 kW or 18:00–22:00</div>
+    </div>
+    <div class="kpi glass">
+      <div class="kpi-label">End-of-Window SoC</div>
+      <div class="kpi-value amber" id="kpi-soc">— <span class="unit">%</span></div>
+      <div class="kpi-sub">Battery state of charge</div>
+    </div>
+  </div>
+
+  <!-- Load Curve Chart -->
+  <div class="chart-card glass" id="chart-card" style="display:none;">
+    <h3 id="chart-title">Predicted Load Curve</h3>
+    <div id="chart-container"><canvas id="chart-canvas"></canvas></div>
+  </div>
+
+  <!-- Hour Badges -->
+  <div class="badge-strip glass" id="badge-strip" style="display:none;">
+    <h3>Grid State by Hour</h3>
+    <div class="badge-row" id="badge-row"></div>
+  </div>
+
+  <!-- SoC Gauge -->
+  <div class="soc-card glass" id="soc-card" style="display:none;">
+    <h3>Battery State of Charge — End of Window</h3>
+    <div class="soc-progress">
+      <div class="soc-fill" id="soc-fill" style="width:0%"></div>
+    </div>
+    <div class="soc-labels">
+      <span>0%</span>
+      <span id="soc-pct-label">—</span>
+      <span>100%</span>
+    </div>
+  </div>
+
+  <!-- Logs -->
+  <div class="log-card glass">
+    <h3>System Log</h3>
+    <ul id="log-list">
+      <li><span class="ts">--:--</span> Awaiting first forecast run…</li>
+    </ul>
+  </div>
+
+  <!-- Empty state placeholder -->
+  <div class="empty-state" id="empty-state">
+    <p style="font-size:1.5rem; opacity:.5;">📊</p>
+    <p>Upload a telemetry CSV to run your first forecast.</p>
+  </div>
+
+  <div id="loading" style="display:none;">
+    <div class="spinner"></div>
+  </div>
+
+  <footer>GridPulse · Smart Energy Microgrid &amp; Demand Forecasting Engine · Zoho Catalyst · by Mridul Gupta</footer>
+</div>
+
+<script>
+let loadChart = null;
+let currentCsv = null;
+let lastData = null;
+
+// ── File handling ─────────────────────────────────────────────────────────────
+const fileDrop = document.getElementById("file-drop");
+const fileInput = document.getElementById("file-input");
+const runBtn = document.getElementById("run-btn");
+
+fileDrop.addEventListener("click", () => fileInput.click());
+fileDrop.addEventListener("dragover", e => { e.preventDefault(); fileDrop.classList.add("drag-over"); });
+fileDrop.addEventListener("dragleave", () => fileDrop.classList.remove("drag-over"));
+fileDrop.addEventListener("drop", async e => {
+  e.preventDefault();
+  fileDrop.classList.remove("drag-over");
+  if (e.dataTransfer.files[0]) await handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", async e => {
+  if (e.target.files[0]) await handleFile(e.target.files[0]);
+});
+
+async function handleFile(file) {
+  if (!file.name.toLowerCase().endsWith(".csv")) {
+    appendLog("error", "Only .csv files are supported.");
+    return;
+  }
+  const text = await file.text();
+  const rows = parseCSV(text);
+  if (rows.length === 0) {
+    appendLog("error", "No valid rows found in that file.");
+    return;
+  }
+  currentCsv = rows;
+  fileDrop.innerHTML = `<strong>✓ ${file.name}</strong><br><span style="font-size:0.72rem; color:var(--muted);">${currentCsv.length} rows loaded · ready</span>`;
+  runBtn.disabled = false;
+  appendLog("info", `Loaded ${currentCsv.length} rows from ${file.name} — will forecast all of them`);
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split("\n");
+  const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+  return lines.slice(1).map(line => {
+    const vals = line.split(",").map(v => v.trim());
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = vals[i]);
+    return obj;
+  }).filter(r => r.timestamp || r.ambient_temp_c);
+}
+
+// ── Run forecast ──────────────────────────────────────────────────────────────
+runBtn.addEventListener("click", async () => {
+  if (!currentCsv) return;
+  runBtn.disabled = true;
+  document.getElementById("loading").style.display = "block";
+  document.getElementById("empty-state").style.display = "none";
+
+  try {
+    const resp = await fetch("/api/forecast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telemetry: currentCsv })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+
+    lastData = await resp.json();
+    clearLogs(); // fresh log per run so old errors can't confuse
+    render(lastData);
+    if (lastData.timestamps_fixed > 0) {
+      appendLog("warning", `Auto-fixed ${lastData.timestamps_fixed} invalid timestamp(s) — use a CSV with real timestamps for best accuracy`);
+    }
+    appendLog("info", `Forecast #${lastData.forecast_id} complete — peak ${lastData.peak_kw} kW, ${lastData.overload_hours.length} overload hours`);
+    if (lastData.overload_hours.length) {
+      appendLog("alert", `⚠ Critical overload detected at hours: ${lastData.overload_hours.join(", ")}`);
+    }
+  } catch (err) {
+    appendLog("error", `Forecast failed: ${err.message}`);
+  } finally {
+    document.getElementById("loading").style.display = "none";
+    runBtn.disabled = false;
+  }
+});
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function render(data) {
+  const n = data.predictions.length;
+  document.getElementById("chart-title").textContent = `${n}-Step Predicted Load Curve`;
+  document.getElementById("kpi-peak-sub").textContent = `${n}-step window max`;
+  document.getElementById("empty-state").style.display = "none";
+  document.getElementById("kpi-grid").style.display = "";
+  document.getElementById("export-btn").style.display = "";
+  document.getElementById("chart-card").style.display = "";
+  document.getElementById("badge-strip").style.display = "";
+  document.getElementById("soc-card").style.display = "";
+
+  // Alert banner
+  const hasOverload = data.overload_hours.length > 0;
+  document.getElementById("alert-banner").classList.toggle("visible", hasOverload);
+  document.getElementById("alert-detail").textContent =
+    hasOverload
+      ? `Overload detected at ${data.overload_hours.map(h => h + ":00").join(", ")}. Immediate load-shedding recommended.`
+      : "";
+
+  // KPIs
+  document.getElementById("kpi-peak").innerHTML =
+    `${data.peak_kw} <span class="unit">kW</span>`;
+  document.getElementById("kpi-overload").textContent =
+    hasOverload ? `${data.overload_hours.length} hr` : "0 hr";
+  document.getElementById("kpi-renewable").textContent =
+    `${data.predictions.filter(p => p.grid_mode === "RENEWABLE_STORAGE").length} hr`;
+  const endSoc = data.battery_soc_series[data.battery_soc_series.length - 1];
+  document.getElementById("kpi-soc").innerHTML =
+    `${endSoc} <span class="unit">%</span>`;
+  document.getElementById("kpi-soc").className = "kpi-value " +
+    (endSoc < 20 ? "red" : endSoc < 50 ? "amber" : "green");
+
+  // SoC gauge
+  document.getElementById("soc-fill").style.width = `${endSoc}%`;
+  document.getElementById("soc-pct-label").textContent = `${endSoc}%`;
+
+  // Badges
+  renderBadges(data.predictions);
+
+  // Chart
+  renderChart(data.predictions);
+
+  // Per-step logs (capped so long runs stay readable)
+  const logs = data.system_log || [];
+  const shown = n > 72 ? logs.filter((_, i) => i % Math.ceil(n / 72) === 0) : logs;
+  shown.forEach(line => {
+    const isAlert = line.includes("⚠") || line.includes("CRITICAL");
+    appendLog(isAlert ? "alert" : "info", line);
+  });
+}
+
+function renderBadges(predictions) {
+  const row = document.getElementById("badge-row");
+  row.innerHTML = "";
+  const shown = predictions.slice(0, 240);
+  shown.forEach(p => {
+    const hour = parseInt(p.timestamp.split(" ")[1].split(":")[0], 10);
+    let cls = "grid";
+    if (p.alert === "CRITICAL_OVERLOAD") cls = "overload";
+    else if (p.grid_mode === "RENEWABLE_STORAGE") cls = "renewable";
+    const badge = document.createElement("div");
+    badge.className = `hour-badge ${cls}`;
+    badge.title = `${p.timestamp}\nPredicted: ${p.predicted_kw} kW\nMode: ${p.grid_mode}\nSOC: ${p.battery_soc_pct}%`;
+    const shortTs = p.timestamp.length > 10 ? p.timestamp.slice(5, 16) : String(hour).padStart(2, "0") + ":00";
+    badge.innerHTML = `<span class="h-label">${shortTs}</span><span class="h-val">${p.predicted_kw}</span>`;
+    row.appendChild(badge);
+  });
+  if (predictions.length > 240) {
+    const more = document.createElement("div");
+    more.className = "hour-badge";
+    more.style.background = "transparent";
+    more.style.border = "1px dashed var(--border)";
+    more.style.color = "var(--muted)";
+    more.textContent = `+${predictions.length - 240}`;
+    row.appendChild(more);
+  }
+}
+
+function renderChart(predictions) {
+  const labels = predictions.map(p => p.timestamp.split(" ")[1] ? p.timestamp.split(" ")[1].slice(0, 5) : p.timestamp);
+  const kw = predictions.map(p => p.predicted_kw);
+  const soc = predictions.map(p => p.battery_soc_pct);
+  const colors = predictions.map(p => {
+    if (p.alert === "CRITICAL_OVERLOAD") return "rgba(229,72,77,0.85)";
+    if (p.grid_mode === "RENEWABLE_STORAGE") return "rgba(24,160,90,0.85)";
+    return "rgba(47,111,237,0.85)";
+  });
+
+  if (loadChart) loadChart.destroy();
+  const ctx = document.getElementById("chart-canvas").getContext("2d");
+  loadChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Predicted Demand (kW)",
+          data: kw,
+          borderColor: "#2f6fed",
+          backgroundColor: colors.map(c => c.replace("0.85", "0.10")),
+          fill: true,
+          pointBackgroundColor: colors,
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 1,
+          pointRadius: kw.length > 120 ? 0 : 5,
+          tension: 0.3,
+          yAxisID: "y"
+        },
+        {
+          label: "Battery SoC (%)",
+          data: soc,
+          borderColor: "#18a05a",
+          backgroundColor: "transparent",
+          pointRadius: kw.length > 120 ? 0 : 3,
+          tension: 0.3,
+          yAxisID: "y1"
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#4b5563", usePointStyle: true, font: { size: 11 } } },
+        tooltip: {
+          backgroundColor: "rgba(255,255,255,0.95)",
+          titleColor: "#1f2428",
+          bodyColor: "#6b7280",
+          borderColor: "rgba(120,130,145,0.25)",
+          borderWidth: 1,
+          titleFont: { weight: "600" }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: "#e8ecf1" },
+          ticks: { color: "#6b7280", font: { size: 10 }, maxTicksLimit: 24 }
+        },
+        y: {
+          position: "left",
+          title: { display: true, text: "Demand (kW)", color: "#6b7280" },
+          grid: { color: "#e8ecf1" },
+          ticks: { color: "#6b7280" }
+        },
+        y1: {
+          position: "right",
+          min: 0, max: 100,
+          title: { display: true, text: "SoC (%)", color: "#18a05a" },
+          grid: { drawOnChartArea: false },
+          ticks: { color: "#18a05a" }
+        }
+      }
+    }
+  });
+}
+
+// ── Export predicted results (submission-spec format) ───────────────────────
+// Exactly two columns, matching the required predictions.csv contract:
+//   timestamp,target_demand_kw
+function exportCsv() {
+  if (!lastData) return;
+  const rows = ["timestamp,target_demand_kw"];
+  lastData.predictions.forEach(p =>
+    rows.push(`${p.timestamp},${p.predicted_kw.toFixed(2)}`));
+  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "predictions.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  appendLog("info", `Exported ${lastData.predictions.length} predictions to predictions.csv`);
+}
+
+function clearLogs() {
+  document.getElementById("log-list").innerHTML = "";
+}
+
+function appendLog(level, message) {
+  const list = document.getElementById("log-list");
+  const li = document.createElement("li");
+  li.className = level === "alert" ? "alert" : level === "warning" ? "warning" : "";
+  const now = new Date().toLocaleTimeString();
+  li.innerHTML = `<span class="ts">${now}</span>${message}`;
+  list.prepend(li);
+}
+
+// Load sample data — use built-in sample
+function generateSample() {
+  const rows = [];
+  const baseDate = new Date();
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(baseDate);
+    d.setHours(i, 0, 0, 0);
+    const ts = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ` +
+               `${String(i).padStart(2, "0")}:00:00`;
+    const temp = 15 + 10 * Math.sin((i - 6) * Math.PI / 12);
+    const hum = 50 + 20 * Math.cos(i / 4);
+    const solar = Math.max(0, 400 * Math.sin((i - 6) * Math.PI / 12));
+    rows.push(`${ts},${temp.toFixed(2)},${hum.toFixed(2)},${solar.toFixed(1)}`);
+  }
+  return rows.join("\n");
+}
+
+function loadSample() {
+  currentCsv = parseCSV(
+    "timestamp,ambient_temp_c,humidity_pct,solar_irradiance_wm2\n" + generateSample()
+  );
+  fileDrop.innerHTML = `<strong>✓ Sample data loaded</strong><br><span style="font-size:0.72rem; color:var(--muted);">${currentCsv.length} rows ready</span>`;
+  runBtn.disabled = false;
+  appendLog("info", "Sample 24-hour telemetry loaded");
+}
+
+// Add sample button
+const sampleBtn = document.createElement("button");
+sampleBtn.className = "btn";
+sampleBtn.style.background = "transparent";
+sampleBtn.style.border = "1px solid var(--border)";
+sampleBtn.style.color = "var(--muted)";
+sampleBtn.style.padding = "12px 18px";
+sampleBtn.style.boxShadow = "none";
+sampleBtn.textContent = "Use Sample Data";
+sampleBtn.addEventListener("click", loadSample);
+document.getElementById("file-drop").parentNode.insertBefore(sampleBtn, runBtn);
+</script>
+</body>
+</html>

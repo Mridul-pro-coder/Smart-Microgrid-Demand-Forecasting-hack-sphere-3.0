@@ -1,0 +1,18 @@
+{
+  "command": "node src/index.js",
+  "build_path": ".",
+  "stack": "node18",
+  "scripts": {
+    "predeploy": "npm install",
+    "preserve": "npm install"
+  },
+  "env_variables": {
+    "HS_QUICKML_URL": "https://api.catalyst.zoho.in/quickml/v1/project/<PROJECT_ID>/endpoints/predict",
+    "HS_QUICKML_KEY": "<X-QUICKML-ENDPOINT-KEY>",
+    "HS_CLIENT_ID": "<zoho_oauth_client_id>",
+    "HS_CLIENT_SECRET": "<zoho_oauth_client_secret>",
+    "HS_ORG": "<your_org_zuid>",
+    "HS_ENV": "Development"
+  },
+  "memory": 256
+}
